@@ -249,7 +249,13 @@ extension PKYouboraPlayerAdapter {
                 self.postEventLog(withMessage: "\(event.namespace)")
             case is PlayerEvent.Error:
                 if let error = event.error {
-                    self.fireFatalError(withMessage: error.localizedDescription, code: "\(error.code)", andMetadata: error.description)
+                    if let internalError = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+                        let errorCodeName = self.formatUnderLineErrorCodeName(for: error)
+                        let errorDescription = error.userInfo.debugDescription
+                        self.fireFatalError(withMessage: errorDescription, code: errorCodeName, andMetadata: internalError.description)
+                    } else {
+                        self.fireFatalError(withMessage: error.localizedDescription, code: "\(error.code)", andMetadata: error.description)
+                    }
                 }
             case is PlayerEvent.DurationChanged:
                 self.lastReportedDuration = event.duration?.doubleValue
@@ -267,6 +273,18 @@ extension PKYouboraPlayerAdapter {
                 assertionFailure("All events must be handled")
             }
         }
+    }
+    /* parse colon formated 3 level error code, Play kit is sending 7000 high level error code, next level we have server(streaming) failure error code and on third level we have apple core playback engine error code  */
+    fileprivate func formatUnderLineErrorCodeName(for eventError: NSError) -> String {
+        var errorCode = String(eventError.code)
+        guard let internalError = eventError.userInfo[NSUnderlyingErrorKey] as? NSError else { return errorCode}
+        errorCode.append(":")
+        errorCode.append(String(internalError.code))
+        if let coreMediaError = internalError.userInfo[NSUnderlyingErrorKey] as? NSError {
+            errorCode.append(":")
+            errorCode.append(String(coreMediaError.code))
+        }
+        return errorCode
     }
     
     fileprivate func unregisterEvents() {
